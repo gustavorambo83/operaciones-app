@@ -195,8 +195,9 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+const filteredTasks = useMemo(() => {
+  return tasks
+    .filter((task) => {
       const matchesStatus =
         statusFilter === "ALL" || task.status === statusFilter;
 
@@ -204,8 +205,31 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
         priorityFilter === "ALL" || task.priority === priorityFilter;
 
       return matchesStatus && matchesPriority;
+    })
+    .sort((a, b) => {
+      const aOverdue = isOverdue(a);
+      const bOverdue = isOverdue(b);
+
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+
+      const priorityWeight: Record<TaskPriority, number> = {
+        CRITICAL: 4,
+        HIGH: 3,
+        MEDIUM: 2,
+        LOW: 1,
+      };
+
+      const priorityDifference =
+        priorityWeight[b.priority] - priorityWeight[a.priority];
+
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
-  }, [tasks, statusFilter, priorityFilter]);
+}, [tasks, statusFilter, priorityFilter]);
 
   const dashboard = useMemo(() => {
     return {
@@ -370,6 +394,15 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
 
   async function handleChangeStatus(taskId: string, nextStatus: TaskStatus) {
     setMessage(null);
+    if (nextStatus === "CLOSED") {
+      const confirmed = window.confirm(
+        "¿Confirmás que querés cerrar esta tarea? Esta acción registrará la fecha de cierre."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    } 
 
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
@@ -801,15 +834,30 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
                 id="evidence-panel"
                 className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4"
               >
-                <div className="mb-4">
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Evidencias de la tarea
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    {selectedTask
-                      ? selectedTask.title
-                      : "Comentarios y trazabilidad operativa."}
-                  </p>
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Evidencias de la tarea
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      {selectedTask
+                        ? selectedTask.title
+                        : "Comentarios y trazabilidad operativa."}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTaskId(null);
+                      setEvidences([]);
+                      setEvidenceComment("");
+                      setMessage(null);
+                    }}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white"
+                  >
+                    Cerrar panel
+                  </button>
                 </div>
 
                 <form
