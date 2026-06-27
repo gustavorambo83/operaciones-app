@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FormEvent, ReactNode, useMemo, useState } from "react";
 
 type TaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "CLOSED";
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -31,6 +31,18 @@ type TaskItem = {
   evidencesCount: number;
 };
 
+type TaskEvidenceItem = {
+  id: string;
+  type: "COMMENT" | "PHOTO" | "FILE" | "LOCATION";
+  comment: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    role: string;
+  };
+};
+
 type ClientOption = {
   id: string;
   name: string;
@@ -51,6 +63,44 @@ type TaskManagerProps = {
   initialTasks: TaskItem[];
   clients: ClientOption[];
   users: UserOption[];
+};
+
+type ApiTaskResponse = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string;
+  closedAt: string | null;
+  createdAt: string;
+  client: {
+    id: string;
+    name: string;
+  };
+  branch: {
+    id: string;
+    name: string;
+    city: string | null;
+  };
+  assignedTo: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  evidences?: unknown[];
+};
+
+type ApiEvidenceResponse = {
+  id: string;
+  type: "COMMENT" | "PHOTO" | "FILE" | "LOCATION";
+  comment: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    role: string;
+  };
 };
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -121,8 +171,15 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | TaskPriority>(
     "ALL"
   );
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [evidences, setEvidences] = useState<TaskEvidenceItem[]>([]);
+  const [evidenceComment, setEvidenceComment] = useState("");
+  const [evidenceUserId, setEvidenceUserId] = useState(users[0]?.id ?? "");
+  const [isLoadingEvidences, setIsLoadingEvidences] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -135,6 +192,8 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
   });
 
   const selectedClient = clients.find((client) => client.id === form.clientId);
+
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -169,9 +228,9 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
       throw new Error("No se pudieron refrescar las tareas");
     }
 
-    const result = await response.json();
+    const result: { data: ApiTaskResponse[] } = await response.json();
 
-    const normalizedTasks: TaskItem[] = result.data.map((task: any) => ({
+    const normalizedTasks: TaskItem[] = result.data.map((task) => ({
       id: task.id,
       title: task.title,
       description: task.description,
@@ -200,7 +259,61 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
     setTasks(normalizedTasks);
   }
 
-  async function handleCreateTask(event: React.FormEvent<HTMLFormElement>) {
+  async function loadEvidences(taskId: string) {
+    setSelectedTaskId(taskId);
+    setEvidences([]);
+    setIsLoadingEvidences(true);
+    setMessage("Cargando evidencias de la tarea seleccionada...");
+
+    setTimeout(() => {
+      document.getElementById("evidence-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/evidences`, {
+        cache: "no-store",
+      });
+
+      const result: { data?: ApiEvidenceResponse[]; error?: string } =
+        await response.json();
+
+      if (!response.ok) {
+        setMessage(result.error ?? "No se pudieron cargar las evidencias.");
+        return;
+      }
+
+      const normalizedEvidences: TaskEvidenceItem[] = (result.data ?? []).map(
+        (evidence) => ({
+          id: evidence.id,
+          type: evidence.type,
+          comment: evidence.comment,
+          createdAt: evidence.createdAt,
+          user: {
+            id: evidence.user.id,
+            name: evidence.user.name,
+            role: evidence.user.role,
+          },
+        })
+      );
+
+      setEvidences(normalizedEvidences);
+      setMessage(
+        `Evidencias cargadas correctamente. Total: ${normalizedEvidences.length}`
+      );
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        "Error inesperado cargando evidencias. Revisá la consola del navegador."
+      );
+    } finally {
+      setIsLoadingEvidences(false);
+    }
+  }
+
+  async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setMessage(null);
@@ -227,7 +340,7 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
         }),
       });
 
-      const result = await response.json();
+      const result: { error?: string } = await response.json();
 
       if (!response.ok) {
         setMessage(result.error ?? "No se pudo crear la tarea.");
@@ -269,7 +382,7 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
         }),
       });
 
-      const result = await response.json();
+      const result: { error?: string } = await response.json();
 
       if (!response.ok) {
         setMessage(result.error ?? "No se pudo actualizar la tarea.");
@@ -278,9 +391,53 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
 
       setMessage("Estado actualizado correctamente.");
       await refreshTasks();
+
+      if (selectedTaskId === taskId) {
+        await loadEvidences(taskId);
+      }
     } catch (error) {
       console.error(error);
       setMessage("Error inesperado actualizando la tarea.");
+    }
+  }
+
+  async function handleCreateEvidence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedTaskId) {
+      setMessage("Debe seleccionar una tarea.");
+      return;
+    }
+
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/tasks/${selectedTaskId}/evidences`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: evidenceUserId,
+          comment: evidenceComment,
+        }),
+      });
+
+      const result: { error?: string } = await response.json();
+
+      if (!response.ok) {
+        setMessage(result.error ?? "No se pudo crear la evidencia.");
+        return;
+      }
+
+      setEvidenceComment("");
+      setMessage("Evidencia agregada correctamente.");
+
+      await loadEvidences(selectedTaskId);
+      await refreshTasks();
+    } catch (error) {
+      console.error(error);
+      setMessage("Error inesperado creando evidencia.");
     }
   }
 
@@ -302,7 +459,7 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
             Gestión de tareas operativas
           </h1>
           <p className="mt-2 text-slate-600">
-            Sprint 3: interfaz web para crear, visualizar y actualizar tareas.
+            Sprint 4: tareas operativas con comentarios de evidencia.
           </p>
         </header>
 
@@ -535,11 +692,13 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
                           <div className="font-medium text-slate-950">
                             {task.title}
                           </div>
+
                           {task.description && (
                             <div className="mt-1 max-w-xs text-xs text-slate-500">
                               {task.description}
                             </div>
                           )}
+
                           {task.evidencesCount > 0 && (
                             <div className="mt-1 text-xs text-slate-400">
                               Evidencias: {task.evidencesCount}
@@ -586,6 +745,7 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
 
                         <td className="px-3 py-3 text-slate-700">
                           <div>{formatDate(task.dueDate)}</div>
+
                           {isOverdue(task) && (
                             <div className="mt-1 text-xs font-semibold text-red-600">
                               Vencida
@@ -595,6 +755,14 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
 
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => loadEvidences(task.id)}
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              Evidencias
+                            </button>
+
                             {nextStatuses.length === 0 && (
                               <span className="text-xs text-slate-400">
                                 Sin acciones
@@ -627,6 +795,92 @@ export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) 
                 No hay tareas con los filtros seleccionados.
               </div>
             )}
+
+            {selectedTaskId && (
+              <section
+                id="evidence-panel"
+                className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Evidencias de la tarea
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    {selectedTask
+                      ? selectedTask.title
+                      : "Comentarios y trazabilidad operativa."}
+                  </p>
+                </div>
+
+                <form
+                  onSubmit={handleCreateEvidence}
+                  className="mb-4 grid gap-3 md:grid-cols-[220px_1fr_auto]"
+                >
+                  <select
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={evidenceUserId}
+                    onChange={(event) => setEvidenceUserId(event.target.value)}
+                    required
+                  >
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={evidenceComment}
+                    onChange={(event) => setEvidenceComment(event.target.value)}
+                    placeholder="Escribir comentario de evidencia"
+                    required
+                    minLength={3}
+                  />
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Agregar
+                  </button>
+                </form>
+
+                {isLoadingEvidences && (
+                  <div className="text-sm text-slate-500">
+                    Cargando evidencias...
+                  </div>
+                )}
+
+                {!isLoadingEvidences && evidences.length === 0 && (
+                  <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+                    Esta tarea todavía no tiene evidencias.
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {evidences.map((evidence) => (
+                    <article
+                      key={evidence.id}
+                      className="rounded-lg border border-slate-200 bg-white p-3"
+                    >
+                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <div className="text-sm font-semibold text-slate-900">
+                          {evidence.user.name}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {formatDate(evidence.createdAt)}
+                        </div>
+                      </div>
+
+                      <p className="mt-2 text-sm text-slate-700">
+                        {evidence.comment}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
         </section>
       </section>
@@ -643,13 +897,7 @@ function DashboardCard({ title, value }: { title: string; value: number }) {
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
