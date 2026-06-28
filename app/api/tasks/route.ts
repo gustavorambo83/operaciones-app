@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TaskPriority } from "@prisma/client";
+import { Prisma, TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createTaskSchema } from "@/lib/task-validations";
+import { requireAuthenticatedUser } from "@/lib/auth";
+
+const validStatuses: TaskStatus[] = [
+  "PENDING",
+  "IN_PROGRESS",
+  "BLOCKED",
+  "CLOSED",
+];
+
+const validPriorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
 
@@ -13,23 +29,54 @@ export async function GET(request: NextRequest) {
     const assignedToId = searchParams.get("assignedToId");
     const overdue = searchParams.get("overdue");
 
+    if (status && !validStatuses.includes(status as TaskStatus)) {
+      return NextResponse.json(
+        {
+          error: "Estado inválido",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (priority && !validPriorities.includes(priority as TaskPriority)) {
+      return NextResponse.json(
+        {
+          error: "Prioridad inválida",
+        },
+        { status: 400 }
+      );
+    }
+
+    const where: Prisma.TaskWhereInput = {};
+
+    if (status) {
+      where.status = status as TaskStatus;
+    }
+
+    if (priority) {
+      where.priority = priority as TaskPriority;
+    }
+
+    if (clientId) {
+      where.clientId = clientId;
+    }
+
+    if (assignedToId) {
+      where.assignedToId = assignedToId;
+    }
+
+    if (overdue === "true") {
+      where.dueDate = {
+        lt: new Date(),
+      };
+
+      where.status = {
+        not: "CLOSED",
+      };
+    }
+
     const tasks = await prisma.task.findMany({
-      where: {
-        ...(status ? { status: status as never } : {}),
-        ...(priority ? { priority: priority as never } : {}),
-        ...(clientId ? { clientId } : {}),
-        ...(assignedToId ? { assignedToId } : {}),
-        ...(overdue === "true"
-          ? {
-              dueDate: {
-                lt: new Date(),
-              },
-              status: {
-                not: "CLOSED",
-              },
-            }
-          : {}),
-      },
+      where,
       include: {
         client: true,
         branch: true,
@@ -62,6 +109,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
 

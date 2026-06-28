@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { updateTaskSchema } from "@/lib/task-validations";
+import { requireAuthenticatedUser } from "@/lib/auth";
 
 type RouteParams = {
   params: Promise<{
@@ -17,6 +18,12 @@ const allowedStatusTransitions: Record<TaskStatus, TaskStatus[]> = {
 };
 
 export async function GET(_request: NextRequest, context: RouteParams) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
 
@@ -64,6 +71,12 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteParams) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -138,7 +151,9 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       },
       data: {
         ...(data.title ? { title: data.title } : {}),
-        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.description !== undefined
+          ? { description: data.description }
+          : {}),
         ...(data.status ? { status: data.status as TaskStatus } : {}),
         ...(data.priority ? { priority: data.priority as TaskPriority } : {}),
         ...(data.assignedToId ? { assignedToId: data.assignedToId } : {}),

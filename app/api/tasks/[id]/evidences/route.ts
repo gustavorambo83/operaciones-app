@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { EvidenceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createEvidenceSchema } from "@/lib/evidence-validations";
+import { requireAuthenticatedUser } from "@/lib/auth";
 
 type RouteParams = {
   params: Promise<{
@@ -10,6 +11,12 @@ type RouteParams = {
 };
 
 export async function GET(_request: NextRequest, context: RouteParams) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
 
@@ -57,6 +64,12 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {
+  const auth = await requireAuthenticatedUser();
+
+  if (auth.response) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
     const body = await request.json();
