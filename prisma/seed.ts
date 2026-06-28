@@ -67,6 +67,14 @@ async function main() {
     },
   });
 
+  const gustavo = await prisma.user.create({
+    data: {
+      name: "Gustavo Rodas",
+      email: "rodas.gus@gmail.com",
+      role: "ADMIN",
+    },
+  });
+
   console.log("Creando clientes...");
 
   const ueno = await prisma.client.create({
