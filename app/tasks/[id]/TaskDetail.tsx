@@ -15,6 +15,13 @@ type CurrentUser = {
   role: "ADMIN" | "SUPERVISOR" | "TECHNICIAN";
 };
 
+type UserOption = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
 type TaskDetailItem = {
   id: string;
   title: string;
@@ -60,6 +67,7 @@ type TaskDetailItem = {
 
 type TaskDetailProps = {
   task: TaskDetailItem;
+  users: UserOption[];
   currentUser: CurrentUser;
 };
 
@@ -85,10 +93,31 @@ const allowedStatusTransitions: Record<TaskStatus, TaskStatus[]> = {
 };
 
 function formatDate(dateValue: string) {
-  return new Intl.DateTimeFormat("es-PY", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(dateValue));
+  const date = new Date(dateValue);
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  const period = hours >= 12 ? "p. m." : "a. m.";
+  hours = hours % 12;
+
+  if (hours === 0) {
+    hours = 12;
+  }
+
+  return `${day}/${month}/${year}, ${hours}:${minutes} ${period}`;
+}
+
+function toDateTimeLocalValue(dateValue: string) {
+  const date = new Date(dateValue);
+  const timezoneOffset = date.getTimezoneOffset() * 60000;
+  const localDate = new Date(date.getTime() - timezoneOffset);
+
+  return localDate.toISOString().slice(0, 16);
 }
 
 function isOverdue(task: TaskDetailItem) {
@@ -125,13 +154,25 @@ function getPriorityClass(priority: TaskPriority) {
   }
 }
 
-export function TaskDetail({ task, currentUser }: TaskDetailProps) {
+export function TaskDetail({ task, users, currentUser }: TaskDetailProps) {
   const router = useRouter();
+
+  const canEditTask =
+    currentUser.role === "ADMIN" || currentUser.role === "SUPERVISOR";
 
   const [message, setMessage] = useState<string | null>(null);
   const [evidenceComment, setEvidenceComment] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isCreatingEvidence, setIsCreatingEvidence] = useState(false);
+  const [isSavingTask, setIsSavingTask] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    title: task.title,
+    description: task.description ?? "",
+    priority: task.priority,
+    assignedToId: task.assignedTo.id,
+    dueDate: toDateTimeLocalValue(task.dueDate),
+  });
 
   const nextStatuses = allowedStatusTransitions[task.status];
 
@@ -210,6 +251,54 @@ export function TaskDetail({ task, currentUser }: TaskDetailProps) {
       setMessage("Error inesperado agregando evidencia.");
     } finally {
       setIsCreatingEvidence(false);
+    }
+  }
+
+  async function handleUpdateTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canEditTask) {
+      setMessage("No tenés permiso para editar esta tarea.");
+      return;
+    }
+
+    if (!editForm.dueDate) {
+      setMessage("Debe seleccionar una fecha límite.");
+      return;
+    }
+
+    setMessage(null);
+    setIsSavingTask(true);
+
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: editForm.title,
+          description: editForm.description || null,
+          priority: editForm.priority,
+          assignedToId: editForm.assignedToId,
+          dueDate: new Date(editForm.dueDate).toISOString(),
+        }),
+      });
+
+      const result: { error?: string } = await response.json();
+
+      if (!response.ok) {
+        setMessage(result.error ?? "No se pudo guardar la tarea.");
+        return;
+      }
+
+      setMessage("Tarea actualizada correctamente.");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setMessage("Error inesperado guardando la tarea.");
+    } finally {
+      setIsSavingTask(false);
     }
   }
 
@@ -295,6 +384,123 @@ export function TaskDetail({ task, currentUser }: TaskDetailProps) {
               </div>
             </section>
 
+            {canEditTask ? (
+              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Editar tarea
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Solo administradores y supervisores pueden modificar estos
+                  datos.
+                </p>
+
+                <form onSubmit={handleUpdateTask} className="mt-5 space-y-4">
+                  <Field label="Título">
+                    <input
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={editForm.title}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                      required
+                      minLength={3}
+                    />
+                  </Field>
+
+                  <Field label="Descripción">
+                    <textarea
+                      className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={editForm.description}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Field label="Prioridad">
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        value={editForm.priority}
+                        onChange={(event) =>
+                          setEditForm((current) => ({
+                            ...current,
+                            priority: event.target.value as TaskPriority,
+                          }))
+                        }
+                      >
+                        <option value="LOW">Baja</option>
+                        <option value="MEDIUM">Media</option>
+                        <option value="HIGH">Alta</option>
+                        <option value="CRITICAL">Crítica</option>
+                      </select>
+                    </Field>
+
+                    <Field label="Responsable">
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        value={editForm.assignedToId}
+                        onChange={(event) =>
+                          setEditForm((current) => ({
+                            ...current,
+                            assignedToId: event.target.value,
+                          }))
+                        }
+                      >
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} ({user.role})
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Fecha límite">
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                        value={editForm.dueDate}
+                        onChange={(event) =>
+                          setEditForm((current) => ({
+                            ...current,
+                            dueDate: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </Field>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingTask}
+                    className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingTask ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </form>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Edición limitada
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  Tu rol actual es {currentUser.role}. Podés cambiar el estado
+                  permitido y agregar evidencias, pero no editar título,
+                  prioridad, responsable ni fecha límite.
+                </p>
+              </section>
+            )}
+
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -376,7 +582,10 @@ export function TaskDetail({ task, currentUser }: TaskDetailProps) {
               </h2>
 
               <div className="mt-4 space-y-3">
-                <InfoItem label="Estado actual" value={statusLabels[task.status]} />
+                <InfoItem
+                  label="Estado actual"
+                  value={statusLabels[task.status]}
+                />
                 <InfoItem
                   label="Prioridad"
                   value={priorityLabels[task.priority]}
@@ -440,5 +649,16 @@ function InfoItem({ label, value }: { label: string; value: string }) {
       </p>
       <p className="mt-1 text-sm text-slate-800">{value}</p>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }

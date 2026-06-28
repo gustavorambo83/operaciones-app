@@ -20,24 +20,32 @@ export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
 
   const { id } = await params;
 
-  const task = await prisma.task.findUnique({
-    where: {
-      id,
-    },
-    include: {
-      client: true,
-      branch: true,
-      assignedTo: true,
-      evidences: {
-        include: {
-          user: true,
-        },
-        orderBy: {
-          createdAt: "desc",
+  const [task, users] = await Promise.all([
+    prisma.task.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        client: true,
+        branch: true,
+        assignedTo: true,
+        evidences: {
+          include: {
+            user: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
         },
       },
-    },
-  });
+    }),
+
+    prisma.user.findMany({
+      orderBy: {
+        name: "asc",
+      },
+    }),
+  ]);
 
   if (!task) {
     notFound();
@@ -116,6 +124,13 @@ export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
     })),
   };
 
+  const serializedUsers = users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  }));
+
   const currentUser = {
     id: auth.appUser.id,
     name: auth.appUser.name,
@@ -123,5 +138,11 @@ export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
     role: auth.appUser.role,
   };
 
-  return <TaskDetail task={serializedTask} currentUser={currentUser} />;
+  return (
+    <TaskDetail
+      task={serializedTask}
+      users={serializedUsers}
+      currentUser={currentUser}
+    />
+  );
 }

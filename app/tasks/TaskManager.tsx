@@ -165,10 +165,23 @@ function getPriorityClass(priority: TaskPriority) {
 }
 
 function formatDate(dateValue: string) {
-  return new Intl.DateTimeFormat("es-PY", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(dateValue));
+  const date = new Date(dateValue);
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  const period = hours >= 12 ? "p. m." : "a. m.";
+  hours = hours % 12;
+
+  if (hours === 0) {
+    hours = 12;
+  }
+
+  return `${day}/${month}/${year}, ${hours}:${minutes} ${period}`;
 }
 
 function isOverdue(task: TaskItem) {
