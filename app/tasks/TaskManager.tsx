@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, ReactNode, useMemo, useState } from "react";
 
 type TaskStatus = "PENDING" | "IN_PROGRESS" | "BLOCKED" | "CLOSED";
@@ -832,6 +833,12 @@ export function TaskManager({
 
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap gap-2">
+                            <Link
+                              href={`/tasks/${task.id}`}
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              Detalle
+                            </Link>
                             <button
                               type="button"
                               onClick={() => loadEvidences(task.id)}
