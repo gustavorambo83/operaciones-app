@@ -1,10 +1,26 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireCurrentAppUser } from "@/lib/auth";
+import { canViewAllTasks } from "@/lib/permissions";
 import { TaskManager } from "./TaskManager";
 import { LogoutButton } from "./LogoutButton";
 
 export default async function TasksPage() {
+  const auth = await requireCurrentAppUser();
+
+  if (auth.response || !auth.appUser) {
+    redirect("/login");
+  }
+
+  const currentUser = auth.appUser;
+
   const [tasks, clients, users] = await Promise.all([
     prisma.task.findMany({
+      where: canViewAllTasks(currentUser.role)
+        ? {}
+        : {
+            assignedToId: currentUser.id,
+          },
       include: {
         client: true,
         branch: true,
@@ -83,6 +99,12 @@ export default async function TasksPage() {
       initialTasks={serializedTasks}
       clients={serializedClients}
       users={serializedUsers}
+      currentUser={{
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+      }}
       headerAction={<LogoutButton />}
     />
   );

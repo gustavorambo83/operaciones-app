@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireCurrentAppUser } from "@/lib/auth";
 import { updateTaskSchema } from "@/lib/task-validations";
-import { requireAuthenticatedUser } from "@/lib/auth";
+import {
+  canTechnicianAccessTask,
+  canTechnicianUpdateTaskFields,
+} from "@/lib/permissions";
 
 type RouteParams = {
   params: Promise<{
@@ -18,9 +22,9 @@ const allowedStatusTransitions: Record<TaskStatus, TaskStatus[]> = {
 };
 
 export async function GET(_request: NextRequest, context: RouteParams) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
   }
 
@@ -55,6 +59,21 @@ export async function GET(_request: NextRequest, context: RouteParams) {
       );
     }
 
+    const canAccess = canTechnicianAccessTask({
+      role: auth.appUser.role,
+      appUserId: auth.appUser.id,
+      assignedToId: task.assignedToId,
+    });
+
+    if (!canAccess) {
+      return NextResponse.json(
+        {
+          error: "No tenés permiso para ver esta tarea",
+        },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       data: task,
     });
@@ -71,9 +90,9 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteParams) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
   }
 
@@ -105,6 +124,38 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
           error: "Tarea no encontrada",
         },
         { status: 404 }
+      );
+    }
+
+    const canAccess = canTechnicianAccessTask({
+      role: auth.appUser.role,
+      appUserId: auth.appUser.id,
+      assignedToId: existingTask.assignedToId,
+    });
+
+    if (!canAccess) {
+      return NextResponse.json(
+        {
+          error: "No tenés permiso para actualizar esta tarea",
+        },
+        { status: 403 }
+      );
+    }
+
+    const requestedFields = Object.keys(validation.data);
+
+    const canUpdateFields = canTechnicianUpdateTaskFields({
+      role: auth.appUser.role,
+      requestedFields,
+    });
+
+    if (!canUpdateFields) {
+      return NextResponse.json(
+        {
+          error:
+            "No tenés permiso para modificar esos campos de la tarea",
+        },
+        { status: 403 }
       );
     }
 

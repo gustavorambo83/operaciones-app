@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireCurrentAppUser } from "@/lib/auth";
 import { createTaskSchema } from "@/lib/task-validations";
-import { requireAuthenticatedUser } from "@/lib/auth";
+import { canCreateTasks, canViewAllTasks } from "@/lib/permissions";
 
 const validStatuses: TaskStatus[] = [
   "PENDING",
@@ -14,9 +15,9 @@ const validStatuses: TaskStatus[] = [
 const validPriorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
   }
 
@@ -65,6 +66,10 @@ export async function GET(request: NextRequest) {
       where.assignedToId = assignedToId;
     }
 
+    if (!canViewAllTasks(auth.appUser.role)) {
+      where.assignedToId = auth.appUser.id;
+    }
+
     if (overdue === "true") {
       where.dueDate = {
         lt: new Date(),
@@ -109,10 +114,19 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
+  }
+
+  if (!canCreateTasks(auth.appUser.role)) {
+    return NextResponse.json(
+      {
+        error: "No tenés permiso para crear tareas",
+      },
+      { status: 403 }
+    );
   }
 
   try {

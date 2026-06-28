@@ -59,10 +59,18 @@ type UserOption = {
   role: string;
 };
 
+type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "SUPERVISOR" | "TECHNICIAN";
+};
+
 type TaskManagerProps = {
   initialTasks: TaskItem[];
   clients: ClientOption[];
   users: UserOption[];
+  currentUser: CurrentUser;
   headerAction?: ReactNode;
 };
 
@@ -166,7 +174,13 @@ function isOverdue(task: TaskItem) {
   return task.status !== "CLOSED" && new Date(task.dueDate) < new Date();
 }
 
-export function TaskManager({ initialTasks, clients, users, headerAction, }: TaskManagerProps) {
+export function TaskManager({
+  initialTasks,
+  clients,
+  users,
+  currentUser,
+  headerAction,
+}: TaskManagerProps) {
   const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
   const [statusFilter, setStatusFilter] = useState<"ALL" | TaskStatus>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | TaskPriority>(
@@ -180,6 +194,9 @@ export function TaskManager({ initialTasks, clients, users, headerAction, }: Tas
   const [evidences, setEvidences] = useState<TaskEvidenceItem[]>([]);
   const [evidenceComment, setEvidenceComment] = useState("");
   const [isLoadingEvidences, setIsLoadingEvidences] = useState(false);
+
+  const canCreateTask =
+    currentUser.role === "ADMIN" || currentUser.role === "SUPERVISOR";
 
   const [form, setForm] = useState({
     title: "",
@@ -195,41 +212,41 @@ export function TaskManager({ initialTasks, clients, users, headerAction, }: Tas
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
 
-const filteredTasks = useMemo(() => {
-  return tasks
-    .filter((task) => {
-      const matchesStatus =
-        statusFilter === "ALL" || task.status === statusFilter;
+  const filteredTasks = useMemo(() => {
+    return tasks
+      .filter((task) => {
+        const matchesStatus =
+          statusFilter === "ALL" || task.status === statusFilter;
 
-      const matchesPriority =
-        priorityFilter === "ALL" || task.priority === priorityFilter;
+        const matchesPriority =
+          priorityFilter === "ALL" || task.priority === priorityFilter;
 
-      return matchesStatus && matchesPriority;
-    })
-    .sort((a, b) => {
-      const aOverdue = isOverdue(a);
-      const bOverdue = isOverdue(b);
+        return matchesStatus && matchesPriority;
+      })
+      .sort((a, b) => {
+        const aOverdue = isOverdue(a);
+        const bOverdue = isOverdue(b);
 
-      if (aOverdue && !bOverdue) return -1;
-      if (!aOverdue && bOverdue) return 1;
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
 
-      const priorityWeight: Record<TaskPriority, number> = {
-        CRITICAL: 4,
-        HIGH: 3,
-        MEDIUM: 2,
-        LOW: 1,
-      };
+        const priorityWeight: Record<TaskPriority, number> = {
+          CRITICAL: 4,
+          HIGH: 3,
+          MEDIUM: 2,
+          LOW: 1,
+        };
 
-      const priorityDifference =
-        priorityWeight[b.priority] - priorityWeight[a.priority];
+        const priorityDifference =
+          priorityWeight[b.priority] - priorityWeight[a.priority];
 
-      if (priorityDifference !== 0) {
-        return priorityDifference;
-      }
+        if (priorityDifference !== 0) {
+          return priorityDifference;
+        }
 
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-}, [tasks, statusFilter, priorityFilter]);
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+  }, [tasks, statusFilter, priorityFilter]);
 
   const dashboard = useMemo(() => {
     return {
@@ -343,6 +360,11 @@ const filteredTasks = useMemo(() => {
     setMessage(null);
 
     try {
+      if (!canCreateTask) {
+        setMessage("No tenés permiso para crear tareas.");
+        return;
+      }
+
       if (!form.dueDate) {
         setMessage("Debe seleccionar una fecha límite.");
         return;
@@ -394,6 +416,7 @@ const filteredTasks = useMemo(() => {
 
   async function handleChangeStatus(taskId: string, nextStatus: TaskStatus) {
     setMessage(null);
+
     if (nextStatus === "CLOSED") {
       const confirmed = window.confirm(
         "¿Confirmás que querés cerrar esta tarea? Esta acción registrará la fecha de cierre."
@@ -402,7 +425,7 @@ const filteredTasks = useMemo(() => {
       if (!confirmed) {
         return;
       }
-    } 
+    }
 
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
@@ -492,7 +515,7 @@ const filteredTasks = useMemo(() => {
               Gestión de tareas operativas
             </h1>
             <p className="mt-2 text-slate-600">
-              Sprint 6: tareas protegidas con autenticación.
+              Usuario: {currentUser.name} · Rol: {currentUser.role}
             </p>
           </div>
 
@@ -514,143 +537,161 @@ const filteredTasks = useMemo(() => {
         )}
 
         <section className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          <form
-            onSubmit={handleCreateTask}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">
-              Crear tarea
-            </h2>
+          {canCreateTask ? (
+            <form
+              onSubmit={handleCreateTask}
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <h2 className="mb-4 text-xl font-semibold text-slate-900">
+                Crear tarea
+              </h2>
 
-            <div className="space-y-4">
-              <Field label="Título">
-                <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                  required
-                  minLength={3}
-                  placeholder="Ej: Revisar UPS monitoreada"
-                />
-              </Field>
+              <div className="space-y-4">
+                <Field label="Título">
+                  <input
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.title}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    required
+                    minLength={3}
+                    placeholder="Ej: Revisar UPS monitoreada"
+                  />
+                </Field>
 
-              <Field label="Descripción">
-                <textarea
-                  className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  placeholder="Detalle operativo de la tarea"
-                />
-              </Field>
+                <Field label="Descripción">
+                  <textarea
+                    className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Detalle operativo de la tarea"
+                  />
+                </Field>
 
-              <Field label="Cliente">
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.clientId}
-                  onChange={(event) => handleClientChange(event.target.value)}
-                  required
+                <Field label="Cliente">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.clientId}
+                    onChange={(event) => handleClientChange(event.target.value)}
+                    required
+                  >
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Sucursal">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.branchId}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        branchId: event.target.value,
+                      }))
+                    }
+                    required
+                  >
+                    {selectedClient?.branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                        {branch.city ? ` - ${branch.city}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Responsable">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.assignedToId}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        assignedToId: event.target.value,
+                      }))
+                    }
+                    required
+                  >
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.role})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Prioridad">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.priority}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        priority: event.target.value as TaskPriority,
+                      }))
+                    }
+                  >
+                    <option value="LOW">Baja</option>
+                    <option value="MEDIUM">Media</option>
+                    <option value="HIGH">Alta</option>
+                    <option value="CRITICAL">Crítica</option>
+                  </select>
+                </Field>
+
+                <Field label="Fecha límite">
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={form.dueDate}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        dueDate: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </Field>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Sucursal">
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.branchId}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      branchId: event.target.value,
-                    }))
-                  }
-                  required
-                >
-                  {selectedClient?.branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                      {branch.city ? ` - ${branch.city}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Responsable">
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.assignedToId}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      assignedToId: event.target.value,
-                    }))
-                  }
-                  required
-                >
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Prioridad">
-                <select
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.priority}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      priority: event.target.value as TaskPriority,
-                    }))
-                  }
-                >
-                  <option value="LOW">Baja</option>
-                  <option value="MEDIUM">Media</option>
-                  <option value="HIGH">Alta</option>
-                  <option value="CRITICAL">Crítica</option>
-                </select>
-              </Field>
-
-              <Field label="Fecha límite">
-                <input
-                  type="datetime-local"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  value={form.dueDate}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      dueDate: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </Field>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSubmitting ? "Creando..." : "Crear tarea"}
-              </button>
-            </div>
-          </form>
+                  {isSubmitting ? "Creando..." : "Crear tarea"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xl font-semibold text-slate-900">
+                Permisos limitados
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Usuario: {currentUser.name}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Rol actual: {currentUser.role}
+              </p>
+              <p className="mt-4 text-sm text-slate-600">
+                Podés ver y actualizar tus tareas asignadas, pero no crear
+                nuevas tareas.
+              </p>
+            </section>
+          )}
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -665,6 +706,19 @@ const filteredTasks = useMemo(() => {
 
               <div className="flex gap-3">
                 <Field label="Estado">
+                  <select
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(event.target.value as "ALL" | TaskStatus)
+                    }
+                  >
+                    <option value="ALL">Todos</option>
+                    <option value="PENDING">Pendiente</option>
+                    <option value="IN_PROGRESS">En proceso</option>
+                    <option value="BLOCKED">Bloqueado</option>
+                    <option value="CLOSED">Cerrado</option>
+                  </select>
                 </Field>
 
                 <Field label="Prioridad">

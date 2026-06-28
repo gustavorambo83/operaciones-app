@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EvidenceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireAuthenticatedUser, requireCurrentAppUser } from "@/lib/auth";
+import { requireCurrentAppUser } from "@/lib/auth";
 import { createEvidenceSchema } from "@/lib/evidence-validations";
+import { canTechnicianAccessTask } from "@/lib/permissions";
 
 type RouteParams = {
   params: Promise<{
@@ -11,9 +12,9 @@ type RouteParams = {
 };
 
 export async function GET(_request: NextRequest, context: RouteParams) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
   }
 
@@ -32,6 +33,21 @@ export async function GET(_request: NextRequest, context: RouteParams) {
           error: "Tarea no encontrada",
         },
         { status: 404 }
+      );
+    }
+
+    const canAccess = canTechnicianAccessTask({
+      role: auth.appUser.role,
+      appUserId: auth.appUser.id,
+      assignedToId: task.assignedToId,
+    });
+
+    if (!canAccess) {
+      return NextResponse.json(
+        {
+          error: "No tenés permiso para ver evidencias de esta tarea",
+        },
+        { status: 403 }
       );
     }
 
@@ -98,6 +114,21 @@ export async function POST(request: NextRequest, context: RouteParams) {
           error: "Tarea no encontrada",
         },
         { status: 404 }
+      );
+    }
+
+    const canAccess = canTechnicianAccessTask({
+      role: auth.appUser.role,
+      appUserId: auth.appUser.id,
+      assignedToId: task.assignedToId,
+    });
+
+    if (!canAccess) {
+      return NextResponse.json(
+        {
+          error: "No tenés permiso para agregar evidencias en esta tarea",
+        },
+        { status: 403 }
       );
     }
 
