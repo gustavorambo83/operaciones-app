@@ -63,6 +63,7 @@ type TaskManagerProps = {
   initialTasks: TaskItem[];
   clients: ClientOption[];
   users: UserOption[];
+  headerAction?: ReactNode;
 };
 
 type ApiTaskResponse = {
@@ -165,7 +166,7 @@ function isOverdue(task: TaskItem) {
   return task.status !== "CLOSED" && new Date(task.dueDate) < new Date();
 }
 
-export function TaskManager({ initialTasks, clients, users }: TaskManagerProps) {
+export function TaskManager({ initialTasks, clients, users, headerAction, }: TaskManagerProps) {
   const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
   const [statusFilter, setStatusFilter] = useState<"ALL" | TaskStatus>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | TaskPriority>(
@@ -487,13 +488,17 @@ const filteredTasks = useMemo(() => {
   return (
     <main className="min-h-screen bg-slate-100 p-6">
       <section className="mx-auto max-w-7xl space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold text-slate-950">
-            Gestión de tareas operativas
-          </h1>
-          <p className="mt-2 text-slate-600">
-            Sprint 4: tareas operativas con comentarios de evidencia.
-          </p>
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-950">
+              Gestión de tareas operativas
+            </h1>
+            <p className="mt-2 text-slate-600">
+              Sprint 6: tareas protegidas con autenticación.
+            </p>
+          </div>
+
+          {headerAction && <div>{headerAction}</div>}
         </header>
 
         <section className="grid gap-4 md:grid-cols-5">

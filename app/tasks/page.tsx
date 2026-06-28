@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { TaskManager } from "./TaskManager";
+import { LogoutButton } from "./LogoutButton";
 
 export default async function TasksPage() {
   const [tasks, clients, users] = await Promise.all([
@@ -82,6 +83,7 @@ export default async function TasksPage() {
       initialTasks={serializedTasks}
       clients={serializedClients}
       users={serializedUsers}
+      headerAction={<LogoutButton />}
     />
   );
 }
