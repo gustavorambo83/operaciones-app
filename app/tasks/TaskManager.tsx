@@ -196,10 +196,14 @@ export function TaskManager({
   headerAction,
 }: TaskManagerProps) {
   const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
+
   const [statusFilter, setStatusFilter] = useState<"ALL" | TaskStatus>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | TaskPriority>(
     "ALL"
   );
+  const [clientFilter, setClientFilter] = useState("ALL");
+  const [assignedToFilter, setAssignedToFilter] = useState("ALL");
+  const [searchText, setSearchText] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -223,10 +227,27 @@ export function TaskManager({
   });
 
   const selectedClient = clients.find((client) => client.id === form.clientId);
-
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
 
+  const visibleUsers = useMemo(() => {
+    const userMap = new Map<string, UserOption>();
+
+    tasks.forEach((task) => {
+      userMap.set(task.assignedTo.id, {
+        id: task.assignedTo.id,
+        name: task.assignedTo.name,
+        role: task.assignedTo.role,
+      });
+    });
+
+    return Array.from(userMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [tasks]);
+
   const filteredTasks = useMemo(() => {
+    const normalizedSearch = searchText.trim().toLowerCase();
+
     return tasks
       .filter((task) => {
         const matchesStatus =
@@ -235,7 +256,28 @@ export function TaskManager({
         const matchesPriority =
           priorityFilter === "ALL" || task.priority === priorityFilter;
 
-        return matchesStatus && matchesPriority;
+        const matchesClient =
+          clientFilter === "ALL" || task.client.id === clientFilter;
+
+        const matchesAssignedTo =
+          assignedToFilter === "ALL" ||
+          task.assignedTo.id === assignedToFilter;
+
+        const matchesSearch =
+          normalizedSearch.length === 0 ||
+          task.title.toLowerCase().includes(normalizedSearch) ||
+          (task.description ?? "").toLowerCase().includes(normalizedSearch) ||
+          task.client.name.toLowerCase().includes(normalizedSearch) ||
+          task.branch.name.toLowerCase().includes(normalizedSearch) ||
+          task.assignedTo.name.toLowerCase().includes(normalizedSearch);
+
+        return (
+          matchesStatus &&
+          matchesPriority &&
+          matchesClient &&
+          matchesAssignedTo &&
+          matchesSearch
+        );
       })
       .sort((a, b) => {
         const aOverdue = isOverdue(a);
@@ -260,7 +302,14 @@ export function TaskManager({
 
         return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       });
-  }, [tasks, statusFilter, priorityFilter]);
+  }, [
+    tasks,
+    statusFilter,
+    priorityFilter,
+    clientFilter,
+    assignedToFilter,
+    searchText,
+  ]);
 
   const dashboard = useMemo(() => {
     return {
@@ -273,6 +322,14 @@ export function TaskManager({
       closed: tasks.filter((task) => task.status === "CLOSED").length,
     };
   }, [tasks]);
+
+  function clearFilters() {
+    setStatusFilter("ALL");
+    setPriorityFilter("ALL");
+    setClientFilter("ALL");
+    setAssignedToFilter("ALL");
+    setSearchText("");
+  }
 
   async function refreshTasks() {
     const response = await fetch("/api/tasks", {
@@ -708,20 +765,39 @@ export function TaskManager({
           )}
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Tareas
-                </h2>
-                <p className="text-sm text-slate-500">
-                  {filteredTasks.length} tarea(s) visibles
-                </p>
+            <div className="mb-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    Tareas
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    {filteredTasks.length} tarea(s) visibles de {tasks.length}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Limpiar filtros
+                </button>
               </div>
 
-              <div className="flex gap-3">
+              <div className="grid gap-3 md:grid-cols-5">
+                <Field label="Buscar">
+                  <input
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="Título, cliente, sucursal..."
+                  />
+                </Field>
+
                 <Field label="Estado">
                   <select
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                     value={statusFilter}
                     onChange={(event) =>
                       setStatusFilter(event.target.value as "ALL" | TaskStatus)
@@ -737,7 +813,7 @@ export function TaskManager({
 
                 <Field label="Prioridad">
                   <select
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                     value={priorityFilter}
                     onChange={(event) =>
                       setPriorityFilter(
@@ -752,11 +828,43 @@ export function TaskManager({
                     <option value="CRITICAL">Crítica</option>
                   </select>
                 </Field>
+
+                <Field label="Cliente">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={clientFilter}
+                    onChange={(event) => setClientFilter(event.target.value)}
+                  >
+                    <option value="ALL">Todos</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Responsable">
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={assignedToFilter}
+                    onChange={(event) =>
+                      setAssignedToFilter(event.target.value)
+                    }
+                  >
+                    <option value="ALL">Todos</option>
+                    {visibleUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-slate-700">
                   <tr>
                     <th className="px-3 py-3">Tarea</th>
@@ -852,6 +960,7 @@ export function TaskManager({
                             >
                               Detalle
                             </Link>
+
                             <button
                               type="button"
                               onClick={() => loadEvidences(task.id)}
