@@ -1,8 +1,6 @@
 import { z } from "zod";
 
 export const createEvidenceSchema = z.object({
-  userId: z.string().uuid("userId debe ser un UUID válido"),
-
   comment: z
     .string()
     .trim()

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EvidenceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireAuthenticatedUser, requireCurrentAppUser } from "@/lib/auth";
 import { createEvidenceSchema } from "@/lib/evidence-validations";
-import { requireAuthenticatedUser } from "@/lib/auth";
 
 type RouteParams = {
   params: Promise<{
@@ -64,9 +64,9 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {
-  const auth = await requireAuthenticatedUser();
+  const auth = await requireCurrentAppUser();
 
-  if (auth.response) {
+  if (auth.response || !auth.appUser) {
     return auth.response;
   }
 
@@ -101,25 +101,10 @@ export async function POST(request: NextRequest, context: RouteParams) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: validation.data.userId,
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error: "Usuario no encontrado",
-        },
-        { status: 404 }
-      );
-    }
-
     const evidence = await prisma.taskEvidence.create({
       data: {
         taskId: id,
-        userId: validation.data.userId,
+        userId: auth.appUser.id,
         type: EvidenceType.COMMENT,
         comment: validation.data.comment,
       },

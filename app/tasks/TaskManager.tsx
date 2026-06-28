@@ -179,7 +179,6 @@ export function TaskManager({ initialTasks, clients, users, headerAction, }: Tas
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [evidences, setEvidences] = useState<TaskEvidenceItem[]>([]);
   const [evidenceComment, setEvidenceComment] = useState("");
-  const [evidenceUserId, setEvidenceUserId] = useState(users[0]?.id ?? "");
   const [isLoadingEvidences, setIsLoadingEvidences] = useState(false);
 
   const [form, setForm] = useState({
@@ -452,7 +451,6 @@ const filteredTasks = useMemo(() => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: evidenceUserId,
           comment: evidenceComment,
         }),
       });
@@ -667,19 +665,6 @@ const filteredTasks = useMemo(() => {
 
               <div className="flex gap-3">
                 <Field label="Estado">
-                  <select
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                    value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(event.target.value as "ALL" | TaskStatus)
-                    }
-                  >
-                    <option value="ALL">Todos</option>
-                    <option value="PENDING">Pendiente</option>
-                    <option value="IN_PROGRESS">En proceso</option>
-                    <option value="BLOCKED">Bloqueado</option>
-                    <option value="CLOSED">Cerrado</option>
-                  </select>
                 </Field>
 
                 <Field label="Prioridad">
@@ -867,21 +852,8 @@ const filteredTasks = useMemo(() => {
 
                 <form
                   onSubmit={handleCreateEvidence}
-                  className="mb-4 grid gap-3 md:grid-cols-[220px_1fr_auto]"
+                  className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]"
                 >
-                  <select
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                    value={evidenceUserId}
-                    onChange={(event) => setEvidenceUserId(event.target.value)}
-                    required
-                  >
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
-
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                     value={evidenceComment}
