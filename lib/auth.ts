@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 import type { User as AppUser } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -26,13 +26,34 @@ type CurrentAppUserResult =
       response: NextResponse;
     };
 
-export async function requireAuthenticatedUser(): Promise<AuthenticatedUserResult> {
+function getBearerToken(request?: NextRequest) {
+  const authorizationHeader = request?.headers.get("authorization");
+
+  if (!authorizationHeader) {
+    return null;
+  }
+
+  const [scheme, token] = authorizationHeader.split(" ");
+
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  return token;
+}
+
+export async function requireAuthenticatedUser(
+  request?: NextRequest
+): Promise<AuthenticatedUserResult> {
   const supabase = await createClient();
+  const bearerToken = getBearerToken(request);
 
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = bearerToken
+    ? await supabase.auth.getUser(bearerToken)
+    : await supabase.auth.getUser();
 
   if (error || !user) {
     return {
@@ -52,8 +73,10 @@ export async function requireAuthenticatedUser(): Promise<AuthenticatedUserResul
   };
 }
 
-export async function requireCurrentAppUser(): Promise<CurrentAppUserResult> {
-  const auth = await requireAuthenticatedUser();
+export async function requireCurrentAppUser(
+  request?: NextRequest
+): Promise<CurrentAppUserResult> {
+  const auth = await requireAuthenticatedUser(request);
 
   if (auth.response) {
     return {

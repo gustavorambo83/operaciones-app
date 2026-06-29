@@ -15,7 +15,7 @@ const validStatuses: TaskStatus[] = [
 const validPriorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export async function GET(request: NextRequest) {
-  const auth = await requireCurrentAppUser();
+  const auth = await requireCurrentAppUser(request);
 
   if (auth.response) {
     return auth.response;
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireCurrentAppUser();
+  const auth = await requireCurrentAppUser(request);
 
   if (auth.response) {
     return auth.response;

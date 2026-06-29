@@ -11,8 +11,8 @@ type RouteParams = {
   }>;
 };
 
-export async function GET(_request: NextRequest, context: RouteParams) {
-  const auth = await requireCurrentAppUser();
+export async function GET(request: NextRequest, context: RouteParams) {
+  const auth = await requireCurrentAppUser(request);
 
   if (auth.response) {
     return auth.response;
@@ -80,7 +80,7 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {
-  const auth = await requireCurrentAppUser();
+  const auth = await requireCurrentAppUser(request);
 
   if (auth.response) {
     return auth.response;
