@@ -1,8 +1,32 @@
 import { NextResponse } from "next/server";
+import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
+import type { User as AppUser } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
-export async function requireAuthenticatedUser() {
+type AuthenticatedUserResult =
+  | {
+      user: SupabaseAuthUser;
+      response: null;
+    }
+  | {
+      user: null;
+      response: NextResponse;
+    };
+
+type CurrentAppUserResult =
+  | {
+      authUser: SupabaseAuthUser;
+      appUser: AppUser;
+      response: null;
+    }
+  | {
+      authUser: SupabaseAuthUser | null;
+      appUser: null;
+      response: NextResponse;
+    };
+
+export async function requireAuthenticatedUser(): Promise<AuthenticatedUserResult> {
   const supabase = await createClient();
 
   const {
@@ -28,10 +52,10 @@ export async function requireAuthenticatedUser() {
   };
 }
 
-export async function requireCurrentAppUser() {
+export async function requireCurrentAppUser(): Promise<CurrentAppUserResult> {
   const auth = await requireAuthenticatedUser();
 
-  if (auth.response || !auth.user) {
+  if (auth.response) {
     return {
       authUser: null,
       appUser: null,

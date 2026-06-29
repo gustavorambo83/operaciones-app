@@ -24,7 +24,7 @@ const allowedStatusTransitions: Record<TaskStatus, TaskStatus[]> = {
 export async function GET(_request: NextRequest, context: RouteParams) {
   const auth = await requireCurrentAppUser();
 
-  if (auth.response || !auth.appUser) {
+  if (auth.response) {
     return auth.response;
   }
 
@@ -92,7 +92,7 @@ export async function GET(_request: NextRequest, context: RouteParams) {
 export async function PATCH(request: NextRequest, context: RouteParams) {
   const auth = await requireCurrentAppUser();
 
-  if (auth.response || !auth.appUser) {
+  if (auth.response) {
     return auth.response;
   }
 
