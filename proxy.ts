@@ -1,7 +1,38 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+const apiCorsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function addCorsHeaders(response: NextResponse) {
+  Object.entries(apiCorsHeaders).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
+  const isApiRequest = request.nextUrl.pathname.startsWith("/api");
+
+  if (isApiRequest && request.method === "OPTIONS") {
+    return new NextResponse(null, {
+      status: 204,
+      headers: apiCorsHeaders,
+    });
+  }
+
+  if (isApiRequest) {
+    return addCorsHeaders(
+      NextResponse.next({
+        request,
+      })
+    );
+  }
+
   let response = NextResponse.next({
     request,
   });
@@ -66,5 +97,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/tasks/:path*", "/login"],
+  matcher: ["/tasks/:path*", "/login", "/api/:path*"],
 };
